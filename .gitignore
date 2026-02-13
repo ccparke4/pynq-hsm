@@ -1,0 +1,35 @@
+# Vivado and Vitis 
+*.jou
+*.log
+*.str
+*.zip
+*.wdb
+*.bin
+*.os
+.Xil/
+*.cache/
+*.hw/
+*.ip_user_files/
+*.runs/
+*.sim/
+*.srcs/
+*.tmp/
+.sdk/
+.metadata/
+.IDE/
+Debug/
+Release/
+
+# compiled SW
+*.elf
+*.o
+*.so
+
+# os stuff
+.DS_Store
+
+# keep these!
+!*.xpr
+!*.bit
+!*.hwh
+!*.xsa
