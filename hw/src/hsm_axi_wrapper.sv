@@ -39,12 +39,62 @@ module hsm_axi_wrapper #
     input  wire                             S_AXI_RREADY             // master "i'm ready"
 );
 
+    // ==== Register Addresses ===
+    localparam ADDR_CTRL            = 3'b000;
+    localparam ADDR_STATUS          = 3'b001;   // 0x04
+    localparam ADDR_DATA_IN         = 3'b010;   // 0x08
+    localparam ADDR_DATA_OUT        = 3'b011;   // 0x0C
+    localparam ADDR_RAW_OSC         = 3'b100;   // 0x10
+    localparam ADDR_COUNTER         = 3'b101;   // 0x14
+    localparam ADDR_RAND_OUT        = 3'b110;   // 0x18
+    localparam ADDR_SAMP_CNT         = 3'b111;   // 0x1C
+
     // === Register Map ===
     // R0: Control | R1: status | R2: Data in | R3: data out
-    logic [C_S_AXI_DATA_WIDTH-1 : 0] slv_reg0;
-    logic [C_S_AXI_DATA_WIDTH-1 : 0] slv_reg1;
-    logic [C_S_AXI_DATA_WIDTH-1 : 0] slv_reg2;
-    logic [C_S_AXI_DATA_WIDTH-1 : 0] slv_reg3;
+    logic [C_S_AXI_DATA_WIDTH-1 : 0] slv_reg_ctrl;
+    logic [C_S_AXI_DATA_WIDTH-1 : 0] slv_reg_status;
+    logic [C_S_AXI_DATA_WIDTH-1 : 0] slv_reg_data_in;
+    logic [C_S_AXI_DATA_WIDTH-1 : 0] slv_reg_data_out;
+    logic [C_S_AXI_DATA_WIDTH-1 : 0] slv_reg_counter;
+
+    // TRNG signals
+    wire [3:0]  trng_raw_osc;
+    wire [31:0] trng_random;
+    wire [31:0] trng_sample_count;
+    wire        trng_osc_running;
+
+    // Control bit extraction
+    wire ctrl_enable    = slv_reg_ctrl[0];
+    wire ctrl_sample    = slv_reg_ctrl[1];
+    wire ctrl_clear     = slv_reg_ctrl[2];
+
+    // === TRNG inst. ===
+    trng_sampler trng_inst (
+        .clk            (S_AXI_ACLK),
+        .rst_n          (S_AXI_ARESETN),
+        .enable         (ctrl_enable),
+        .sample_trig    (ctrl_sample),
+        .clear          (ctrl_clear),
+        .raw_osc        (trng_raw_osc),
+        .random_out     (trng_random),
+        .sample_count   (trng_sample_count),
+        .osc_running    (trng_osc_running)
+    );
+
+    // === Free running counter for debug ===
+    always_ff @(posedge S_AXI_ACLK or negedge S_AXI_ARESETN) begin
+        if (!S_AXI_ARESETN)
+            slv_reg_counter <= 32'h0;
+        else    
+            slv_reg_counter <= slv_reg_counter + 1;
+    end
+
+    // === Status register ===
+    always_comb begin
+        slv_reg_status = 32'h0;
+        slv_reg_status[0] = trng_osc_running;
+        slv_reg_status[7:4] = trng_raw_osc;
+    end
 
     // --- Internal signals for handshaking ---
     logic axi_awready;
@@ -71,11 +121,14 @@ module hsm_axi_wrapper #
             axi_awready <= 0;
             axi_wready  <= 0;
             axi_bvalid  <= 0;
-            slv_reg0    <= 0;
-            slv_reg1    <= 0;
-            slv_reg2    <= 0;
-            slv_reg3    <= 0;
+            slv_reg_ctrl    <= 32'h0;
+            slv_reg_data_in <= 32'h0;
+            slv_reg_data_out<= 32'h0;
         end else begin
+            // default case -> deasssert ready signals
+            if (axi_awready) axi_awready <= 1'b0;
+            if (axi_wready)  axi_wready  <= 1'b0;
+
             // 1. Wait for Valid Address (AW) and Valid Data (W) ---------------------------
             // Not ready? -> master still presents valid addr/data? -> 
             // Raise our our flags and say i accept...
@@ -94,10 +147,9 @@ module hsm_axi_wrapper #
                 // S_AXI_AADDR[3:2] sels. what reg.
                 // ignore bits [1:0] axi is 4'B aligned
                 case (S_AXI_AWADDR[3:2]) 
-                    2'b00: slv_reg0 <= S_AXI_WDATA;
-                    2'b01: slv_reg1 <= S_AXI_WDATA;
-                    2'b10: slv_reg2 <= S_AXI_WDATA;
-                    2'b11: slv_reg3 <= S_AXI_WDATA;
+                    ADDR_CTRL:     slv_reg_ctrl     <= S_AXI_WDATA;
+                    ADDR_DATA_IN:  slv_reg_data_in  <= S_AXI_WDATA;
+                    ADDR_DATA_OUT: slv_reg_data_out <= S_AXI_WDATA;
                 endcase
             end
 
@@ -133,11 +185,16 @@ module hsm_axi_wrapper #
                 axi_rvalid <= 1;    // heres your data
 
                 // select which register was addressed
-                case (S_AXI_ARADDR[3:2]) 
-                    2'b00: axi_rdata <= slv_reg0;
-                    2'b01: axi_rdata <= slv_reg1;
-                    2'b10: axi_rdata <= slv_reg2;
-                    2'b11: axi_rdata <= slv_reg3;
+                case (S_AXI_ARADDR[4:2]) 
+                    ADDR_CTRL:     axi_rdata <= slv_reg_ctrl;
+                    ADDR_STATUS:   axi_rdata <= slv_reg_status;
+                    ADDR_DATA_IN:  axi_rdata <= slv_reg_data_in;
+                    ADDR_DATA_OUT: axi_rdata <= slv_reg_data_out;
+                    ADDR_RAW_OSC:  axi_rdata <= {28'h0, trng_raw_osc};
+                    ADDR_COUNTER:  axi_rdata <= slv_reg_counter;
+                    ADDR_RAND_OUT: axi_rdata <= trng_random;
+                    ADDR_SAMP_CNT: axi_rdata <= trng_sample_count;
+                    default:       axi_rdata <= 32'hDEADBEEF;
                 endcase
             end else if (axi_rvalid && S_AXI_ARREADY) begin
                 // if ext. IP accepted data (RREADY=1) we turn off Read valid (RVALID set to 0)
