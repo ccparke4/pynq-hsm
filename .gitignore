@@ -1,35 +1,35 @@
-# Vivado and Vitis 
+# Vivado generated (can be rebuilt)
 *.jou
 *.log
 *.str
-*.zip
 *.wdb
-*.bin
-*.os
+*.zip
 .Xil/
+
+# Vivado project dirs (large, regenerated)
 *.cache/
 *.hw/
 *.ip_user_files/
-*.runs/
 *.sim/
-*.srcs/
-*.tmp/
+*.runs/
+*.gen/
+
+# SDK/Vitis
 .sdk/
 .metadata/
 .IDE/
 Debug/
 Release/
 
-# compiled SW
+# Compiled SW
 *.elf
 *.o
 *.so
+build/
 
-# os stuff
+# OS
 .DS_Store
+Thumbs.db
 
-# keep these!
+# Keep project file
 !*.xpr
-!*.bit
-!*.hwh
-!*.xsa
