@@ -196,7 +196,7 @@ module hsm_axi_wrapper #
                     ADDR_SAMP_CNT: axi_rdata <= trng_sample_count;
                     default:       axi_rdata <= 32'hDEADBEEF;
                 endcase
-            end else if (axi_rvalid && S_AXI_ARREADY) begin
+            end else if (axi_rvalid && S_AXI_RREADY) begin
                 // if ext. IP accepted data (RREADY=1) we turn off Read valid (RVALID set to 0)
                 axi_rvalid <= 0;
             end
