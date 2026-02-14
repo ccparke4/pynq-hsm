@@ -6,9 +6,26 @@ BOARD_USER := xilinx
 
 # Paths
 VIVADO_PROJECT := hw/hsm_system_top
+# Note: Keep forward slashes here; we will fix them automatically later
 BIT_FILE := $(VIVADO_PROJECT)/hsm_system_top.runs/impl_1/hsm_system_design_wrapper.bit
 HWH_FILE := $(VIVADO_PROJECT)/hsm_system_top.gen/sources_1/bd/hsm_system_design/hw_handoff/hsm_system_design.hwh
 DEPLOY_DIR := deploy
+
+# --- OS Detection & Command Setup ---
+ifeq ($(OS),Windows_NT)
+    # Windows Settings
+    MKDIR = if not exist $(DEPLOY_DIR) mkdir $(DEPLOY_DIR)
+    CP = copy /Y
+    RM = if exist $(DEPLOY_DIR) rmdir /s /q $(DEPLOY_DIR)
+    # Magic to change / to \ for Windows commands
+    FIXPATH = $(subst /,\,$1)
+else
+    # Linux / Bash Settings
+    MKDIR = mkdir -p $(DEPLOY_DIR)
+    CP = cp
+    RM = rm -rf $(DEPLOY_DIR)
+    FIXPATH = $1
+endif
 
 .PHONY: all deploy package upload ssh test clean help
 
@@ -23,15 +40,14 @@ help:
 
 # Copy bitstream and hardware handoff to deploy/
 package:
-	@mkdir -p $(DEPLOY_DIR)
+	@$(MKDIR)
 	@echo "Copying bitstream..."
-	@cp $(BIT_FILE) $(DEPLOY_DIR)/hsm_overlay.bit
+	@$(CP) $(call FIXPATH,$(BIT_FILE)) $(call FIXPATH,$(DEPLOY_DIR)\hsm_overlay.bit)
 	@echo "Copying hardware handoff..."
-	@cp $(HWH_FILE) $(DEPLOY_DIR)/hsm_overlay.hwh
+	@$(CP) $(call FIXPATH,$(HWH_FILE)) $(call FIXPATH,$(DEPLOY_DIR)\hsm_overlay.hwh)
 	@echo "Done. Files in $(DEPLOY_DIR)/"
-	@ls -la $(DEPLOY_DIR)/
 
-# Upload to board
+# Upload to board (scp works fine on Windows 10+)
 upload: package
 	@echo "Uploading to $(BOARD_USER)@$(BOARD_IP)..."
 	scp $(DEPLOY_DIR)/hsm_overlay.bit $(BOARD_USER)@$(BOARD_IP):~/
@@ -57,4 +73,5 @@ ssh:
 
 # Clean
 clean:
-	rm -rf $(DEPLOY_DIR)
+	@$(RM)
+	@echo "Cleaned deploy directory."
