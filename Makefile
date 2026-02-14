@@ -63,9 +63,20 @@ deploy: upload
 		g++ -o test_hsm test_hsm.cpp && \
 		echo "Ready. Run: sudo ./test_hsm"'
 
+# mac specific: automated sw test
+sw-test:
+	@echo "Uploading C++ driver..."
+	scp sw/drivers/test_hsm.cpp $(BOARD_USER)@$(BOARD_IP):~/
+	
+	@echo "Compiling and running..."
+	ssh -t $(BOARD_USER)@$(BOARD_IP) '\
+		g++ -o test_hsm test_hsm.cpp && \
+		echo "Compilation successful. Running test..." && \
+		sudo ./test_hsm'
+
 # Run test
 test:
-	ssh $(BOARD_USER)@$(BOARD_IP) 'sudo ./test_hsm'
+	ssh -t $(BOARD_USER)@$(BOARD_IP) 'sudo ./test_hsm'
 
 # SSH to board
 ssh:

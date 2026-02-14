@@ -128,7 +128,7 @@ int main() {
 
     // Test 4: Collect multiple random values to see if they change
     printf("\n [TEST 4] Collecting Multiple Random Values\n");
-    for (int i = 0; i < 5; i++) {
+    for (int n = 0; n < 5; n++) {
         // clear and generate 32 new bits
         hsm.write(REG::CTRL, CTRL::ENABLE | CTRL::CLEAR);
         usleep(10);
