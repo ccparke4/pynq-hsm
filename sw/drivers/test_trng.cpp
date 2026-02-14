@@ -140,7 +140,7 @@ int main() {
             hsm.write(REG::CTRL, CTRL::ENABLE);               
             usleep(5);
         }
-        printf("    Random[%d]: 0x%08X\n", i+1, hsm.read(REG::RAND_OUT));
+        printf("    Random[%d]: 0x%08X\n", n+1, hsm.read(REG::RAND_OUT));
     }
 
     // disable oscillator
