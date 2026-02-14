@@ -1,17 +1,16 @@
 # PYNQ HSM Project Makefile
-# Mac: SSH deploy/test | Windows: Vivado/JTAG
+# Windows: Vivado build + JTAG program
+# Mac: Upload drivers + compile/test via SSH
 
-# Board settings
 BOARD_IP ?= 192.168.2.99
 BOARD_USER := xilinx
 
-# Paths
+VIVADO := C:/AMDDesignTools/2025.2/Vivado/bin/vivado.bat
 VIVADO_PROJECT := hw/hsm_system_top
 BIT_FILE := $(VIVADO_PROJECT)/hsm_system_top.runs/impl_1/hsm_system_design_wrapper.bit
 HWH_FILE := $(VIVADO_PROJECT)/hsm_system_top.gen/sources_1/bd/hsm_system_design/hw_handoff/hsm_system_design.hwh
 DEPLOY_DIR := deploy
 
-# OS Detection
 ifeq ($(OS),Windows_NT)
     DETECTED_OS := Windows
     MKDIR = if not exist $(DEPLOY_DIR) mkdir $(DEPLOY_DIR)
@@ -24,42 +23,29 @@ else
     MKDIR = mkdir -p $(DEPLOY_DIR)
     CP = cp
     RM = rm -rf $(DEPLOY_DIR)
-    FIXPATH = $1
     SEP := /
 endif
 
-.PHONY: help package clean ping ssh deploy test test-trng upload program
+.PHONY: help clean
 
 help:
 	@echo "PYNQ HSM Makefile - Detected OS: $(DETECTED_OS)"
 	@echo ""
-	@echo "=== Both Platforms ==="
-	@echo "  make package    - Copy .bit/.hwh to deploy/"
-	@echo "  make clean      - Remove deploy/"
-	@echo ""
 ifeq ($(DETECTED_OS),Windows)
 	@echo "=== Windows (Vivado/JTAG) ==="
-	@echo "  make program    - Program FPGA via Vivado JTAG"
-	@echo "  make serial     - Open PuTTY serial console"
+	@echo "  make package   - Copy .bit/.hwh to deploy/"
+	@echo "  make program   - Program FPGA via JTAG"
+	@echo "  make serial    - Open PuTTY serial console"
+	@echo "  make clean     - Remove deploy/"
 else
 	@echo "=== Mac (SSH) ==="
-	@echo "  make ping       - Check board connectivity"
-	@echo "  make ssh        - SSH to board"
-	@echo "  make upload     - Upload files to board"
-	@echo "  make deploy     - Package + upload + load bitstream"
-	@echo "  make test       - Run test_hsm"
-	@echo "  make test-trng  - Run test_trng"
+	@echo "  make ping      - Check board connectivity"
+	@echo "  make ssh       - SSH to board"
+	@echo "  make upload    - Upload C++ drivers to board"
+	@echo "  make test      - Compile + run test_hsm"
+	@echo "  make test-trng - Compile + run test_trng"
+	@echo "  make clean     - Remove deploy/"
 endif
-
-# ============ BOTH PLATFORMS ============
-
-package:
-	@$(MKDIR)
-	@echo "Copying bitstream..."
-	@$(CP) $(call FIXPATH,$(BIT_FILE)) $(call FIXPATH,$(DEPLOY_DIR)$(SEP)hsm_overlay.bit)
-	@echo "Copying hardware handoff..."
-	@$(CP) $(call FIXPATH,$(HWH_FILE)) $(call FIXPATH,$(DEPLOY_DIR)$(SEP)hsm_overlay.hwh)
-	@echo "Done. Files in $(DEPLOY_DIR)/"
 
 clean:
 	@$(RM)
@@ -68,14 +54,19 @@ clean:
 # ============ WINDOWS ONLY ============
 ifeq ($(DETECTED_OS),Windows)
 
-# Program via JTAG using Vivado
-program:
-	@echo "Programming FPGA via JTAG..."
-	vivado -mode batch -source scripts/program.tcl
+package:
+	@$(MKDIR)
+	@echo Copying bitstream...
+	@$(CP) $(call FIXPATH,$(BIT_FILE)) $(call FIXPATH,$(DEPLOY_DIR)$(SEP)hsm_overlay.bit)
+	@echo Copying hardware handoff...
+	@$(CP) $(call FIXPATH,$(HWH_FILE)) $(call FIXPATH,$(DEPLOY_DIR)$(SEP)hsm_overlay.hwh)
+	@echo Done.
 
-# Open serial console
+program: package
+	@echo Programming FPGA via JTAG...
+	$(VIVADO) -mode batch -source scripts/program.tcl
+
 serial:
-	@echo "Opening serial console..."
 	putty -serial COM7 -sercfg 115200,8,n,1,N
 
 endif
@@ -90,17 +81,9 @@ ssh:
 	ssh $(BOARD_USER)@$(BOARD_IP)
 
 upload:
-	@test -f $(DEPLOY_DIR)/hsm_overlay.bit || (echo "Error: deploy/hsm_overlay.bit not found. Run 'make package' on Windows first." && exit 1)
-	@echo "Uploading to $(BOARD_USER)@$(BOARD_IP)..."
-	scp $(DEPLOY_DIR)/hsm_overlay.bit $(BOARD_USER)@$(BOARD_IP):~/
-	scp $(DEPLOY_DIR)/hsm_overlay.hwh $(BOARD_USER)@$(BOARD_IP):~/
+	@echo "Uploading drivers to $(BOARD_USER)@$(BOARD_IP)..."
 	scp sw/drivers/*.cpp $(BOARD_USER)@$(BOARD_IP):~/
-	@echo "Upload complete."
-
-deploy: upload
-	@echo "Loading bitstream..."
-	ssh -t $(BOARD_USER)@$(BOARD_IP) 'sudo fpgautil -b /home/xilinx/hsm_overlay.bit'
-	@echo "Ready."
+	@echo "Done."
 
 test:
 	ssh -t $(BOARD_USER)@$(BOARD_IP) 'g++ -o test_hsm test_hsm.cpp && sudo ./test_hsm'
