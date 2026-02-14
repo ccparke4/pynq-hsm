@@ -3,7 +3,7 @@
 module hsm_axi_wrapper #
 (
     parameter integer C_S_AXI_DATA_WIDTH = 32,
-    parameter integer C_S_AXI_ADDR_WIDTH = 4
+    parameter integer C_S_AXI_ADDR_WIDTH = 5
 )(
     // global clk & rst
     input wire S_AXI_ACLK,
@@ -144,9 +144,9 @@ module hsm_axi_wrapper #
             // 2. Actually write the data to the regs -------------------------------------
             // if both sides agree (Rdy=1,valid=1), capture data
             if (axi_awready && S_AXI_AWVALID && axi_wready && S_AXI_WVALID) begin
-                // S_AXI_AADDR[3:2] sels. what reg.
+                // S_AXI_AADDR[4:2] sels. what reg.
                 // ignore bits [1:0] axi is 4'B aligned
-                case (S_AXI_AWADDR[3:2]) 
+                case (S_AXI_AWADDR[4:2]) 
                     ADDR_CTRL:     slv_reg_ctrl     <= S_AXI_WDATA;
                     ADDR_DATA_IN:  slv_reg_data_in  <= S_AXI_WDATA;
                     ADDR_DATA_OUT: slv_reg_data_out <= S_AXI_WDATA;
