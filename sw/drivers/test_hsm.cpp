@@ -95,7 +95,7 @@ public:
     // --- Timeout implementation ---
     bool waitForDone(int timeout_ms = 1000) {
         int attempts = 0;
-        usleep(100);
+        //usleep(100);
         return true;
     }
 
@@ -106,7 +106,7 @@ public:
     uint32_t getTrngRandom() {
         // 1. Clear and enable
         writeReg(REG_CTRL, Ctrl::ENABLE | Ctrl::CLEAR);
-        usleep(10); // wait for clear
+        //usleep(10); // wait for clear
 
         // 2. Trigger Sample
         writeReg(REG_CTRL, Ctrl::ENABLE | Ctrl::SAMPLE);
@@ -144,32 +144,49 @@ void test_trng_health(PynqHSM& hsm) {
         std::cout << "[PASS] TRNG values changing, not frozen." << std::endl;
 }
 
-int main() {
-    // 1. Reg the signal handler immediately
-    signal(SIGINT, signal_handler);
+int main(int argc, char* argv[]) {
+    // 1. arg check: text mode vs binary
+    bool binary_mode = false;
+    if (argc > 1 && std::string(argv[1]) == "--binary") {
+        binary_mode = true;
+        std::cout << "Running in BINARY mode. Outputting raw TRNG values." << std::endl;
+    } 
 
-    std::cout << "--- PYNQ HSM v0.3 ---" << std::endl;
-    std::cout << "[INFO] Press Ctrl+C to stop safely." << std::endl;
+    signal(SIGINT, signal_handler);
 
     PynqHSM hsm(HSM_BASE_ADDR, HSM_SIZE);
 
-    // 2. Update test loop to check flag
-    std::cout << "Generating random numbers (loop)..." << std::endl;
+    // only print text info if not in binary mode
+    if (!binary_mode) {
+        std::cout << "PYNQ HSM Driver Test Starting..." << std::endl;
+        std::cout << "Press Ctrl+C to stop." << std::endl;
+        // run health check in text mode
+        test_trng_health(hsm);
+    }
 
-    int count = 0;
-    while (!stop_requested) {   // <- check flag
-        uint32_t rnd = hsm.getTrngRandom();
-
-        if (rnd == 0xFFFFFFFF) {
-            std::cerr << "[ERROR] Failed to get random number. Stopping test." << std::endl;
+    while (!stop_requested) {
+        uint32_t random_value = hsm.getTrngRandom();
+        
+        // HW error check 
+        if (random_value == 0xFFFFFFFF) {
+            std::cerr << "[ERROR] Failed to get TRNG value. Hardware may be stuck." << std::endl;
             break;
         }
 
-        std::cout << "Sample" << std::dec << count++ << ": 0x" << std::hex << rnd << std::endl;
+        if (binary_mode) {
+            // write raw bytes
+            // write 4 bytes to stdout
+            std::cout.write(reinterpret_cast<const char*>(&random_value), sizeof(random_value));
 
-        usleep(100000); // wait 100ms between samples
+        } else {
+            // text mode for debug
+            std::cout <<"0x" << std::hex << random_value << std::endl;
+        }
     }
-    // 3. When loop breaks
-    std::cout << "\n[INFO] Exiting gracefully..." << std::endl;
+
+    if (!binary_mode) {
+        std::cout << "PYNQ HSM Driver Test Ending..." << std::endl;
+    }
     return 0;
+        
 }
