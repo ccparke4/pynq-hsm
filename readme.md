@@ -48,7 +48,6 @@ sudo ./test_hsm --binary | dd of=rng_data.bin bs=1024 count=1000 iflag=fullblock
 ent rng_data.bin
 
 #### 3. Setup Board Network (Serial Console)
-```bash
 # Connect via PuTTY to COM7 at 115200 baud
 # Login: xilinx / xilinx
 sudo ip addr add 192.168.2.99/24 dev eth0
