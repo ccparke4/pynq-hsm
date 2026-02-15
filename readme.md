@@ -49,7 +49,7 @@ ent rng_data.bin
 
 #### 3. Setup Board Network (Serial Console)
 # Connect via PuTTY to COM7 at 115200 baud
-# Login: xilinx / xilinx
+# Login
 sudo ip addr add 192.168.2.99/24 dev eth0
 ```
 ### Results
