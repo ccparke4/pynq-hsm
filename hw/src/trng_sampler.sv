@@ -91,7 +91,8 @@ module trng_sampler(
     always_ff @(posedge clk) sample_trig_d <= sample_trig;
     wire software_request = sample_trig & ~sample_trig_d;  // rising edge detect
 
-    reg waiting_for_bit;  // track if we're waiting for a valid bit after SW req
+    reg         waiting_for_bit;    // track if we're waiting for a valid bit after SW req
+    reg [4:0]   bit_counter;        // Count how many bits
 
     always_ff @(posedge clk or negedge rst_n) begin
         if (!rst_n || clear) begin
@@ -99,14 +100,22 @@ module trng_sampler(
             sample_count <= '0;
             waiting_for_bit <= '0;
         end else begin
-            // If sw asks, rememberwe are waiting
-            if (software_request) waiting_for_bit <= 1;
+            // start collecting on sw req
+            if (software_request) begin 
+                waiting_for_bit <= 1;
+                bit_counter <= 5'd0;
+            end
 
-            // if we are waiting AND the debiaser gives a valid bit...
+            // waiting and debiaser gives valid bit...
             if (waiting_for_bit && valid_strobe) begin
-                random_out <= {random_out[30:0], valid_bit};  // shift in new bit
-                sample_count <= sample_count + 1;
-                waiting_for_bit <= 0;  // done with this request
+                random_out  <= {random_out[30:0], valid_bit};  // shift in new bit
+                bit_counter <= bit_counter + 1;
+
+                // stop when have 32 bits
+                if (bit_counter == 5'd31) begin
+                    waiting_for_bit <= 0;  // done, wait for next SW req
+                    sample_count <= sample_count + 1; // count # of samples taken
+                end
             end
         end
     end
