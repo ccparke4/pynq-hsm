@@ -112,34 +112,4 @@ module trng_sampler(
     end
 
 
-    // sample trigger edge detection
-    reg sample_trig_d;
-    wire sample_pulse;
-
-    always_ff @(posedge clk or negedge rst_n) begin
-        if (!rst_n) 
-            sample_trig_d <= 1'b0;
-        else
-            sample_trig_d <= sample_trig;
-    end
-
-    assign sample_pulse = sample_trig & ~sample_trig_d;
-
-    // bit accumulators - shift in XOR of all osc
-    wire entropy_bit = ^osc_sync2;  // all 4 bits
-
-    always_ff @(posedge clk or negedge rst_n) begin
-        if (!rst_n) begin
-            random_out   <= 32'h0;
-            sample_count <= 32'h0;
-        end else if (clear) begin
-            random_out   <= 32'h0;
-            sample_count <= 32'h0;
-        end else if (sample_pulse && enable) begin
-            // shift in new entropy bit
-            random_out   <= {random_out[30:0], entropy_bit};
-            sample_count <= sample_count + 1;
-        end
-    end
-
 endmodule
