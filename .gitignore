@@ -32,4 +32,4 @@ build/
 Thumbs.db
 
 # Keep project file
-!*.xpr
+!*.xpr*.bin

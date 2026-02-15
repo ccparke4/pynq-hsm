@@ -2,13 +2,28 @@
 Hardware Security Module on PYNQ-Z2 
 
 ## Status
-- [x] v0.1.0 - AXI-Lite register interface working
-- [x] v0.2.0 - TRNG w/ Ring oscillator entropy source 
-- [ ] Encryption Core
-- [ ] Key storage
+- [x] **v0.1.0** - AXI-Lite register interface working
+- [x] **v0.2.0** - TRNG w/ Ring oscillator entropy source 
+- [x] **v0.3.0** - Validated TRNG (Von Neumann Debiaser + Handshake logic) 
+- [ ] **v0.4.0** - AES-256 Encryption Core 
+- [ ] **v0.5.0** -  Secure Key Storage
 
 ## Architecture/Block Design
+### HDL Block Diagram
 ![Block Diagram](docs/hsm_bd_init.png)
+
+### Overview
+The HSM is implemented in HDL and communicates with the Processing system via AXI4-Lite.
+`[ARM Core(Linux)] <---> [AXI] <---> [HSM Core]`
+
+### TRNG Design (Entropy Source)
+The TRNG derives randomness from thermal noise and clock jitter using free-running Ring Oscillators (ROs).
+1.  **Entropy Source:** 4 parallel Ring Oscillators with prime number stage lengths (13, 17, 19, 23 inverters) to prevent frequency locking.
+2.  **Digitizer:** The RO outputs are XORed together and sampled at a lower frequency to capture jitter.
+3.  **Whitening (Von Neumann Debiaser):** - Eliminates bias (e.g., if the circuit naturally favors '1's).
+    - Logic: Reads pairs of bits. `01` -> Output `1`. `10` -> Output `0`. `00` & `11` -> Discard.
+4.  **Accumulator:** Collects 32 valid bits into a holding register.
+5.  **Interface:** Uses a "Valid/Done" handshake signal to ensure the software never reads partial or stale data.
 
 ## Register Map
 
@@ -23,29 +38,14 @@ Hardware Security Module on PYNQ-Z2
 | 0x18   | RAND_OUT | R      | 32-bit random value              |
 | 0x1C   | SAMP_CNT | R      | Number of samples taken          |
 
-## TRNG Design
-Uses 4 ring oscillators with different prime stage counts (13,17, 19, 23 inverters)
+## Verification & Benchmarks (v0.3.0)
 
-## Quick Start
+Randomness was verified using the **ENT** industry-standard statistical analysis tool.
 
-### Manual Steps
-
-#### 1. Build Bitstream (Windows VM - Vivado)
-1. Open `hw/hsm_system_top/hsm_system_top.xpr`
-2. Run Synthesis → Implementation → Generate Bitstream
-3. Copy files to `deploy/`:
-```powershell
-   mkdir deploy
-   copy hw\hsm_system_top\hsm_system_top.runs\impl_1\hsm_system_design_wrapper.bit deploy\hsm_overlay.bit
-   copy hw\hsm_system_top\hsm_system_top.gen\sources_1\bd\hsm_system_design\hw_handoff\hsm_system_design.hwh deploy\hsm_overlay.hwh
-```
-
-#### 2. Program FPGA (Windows VM - Vivado)
-1. Open Hardware Manager
-2. Open Target → Auto Connect
-3. Right-click `xc7z020` → Program Device
-4. Select `deploy/hsm_overlay.bit`
-5. Click Program
+**Test Command:**
+```bash
+sudo ./test_hsm --binary | dd of=rng_data.bin bs=1024 count=1000 iflag=fullblock
+ent rng_data.bin
 
 #### 3. Setup Board Network (Serial Console)
 ```bash
@@ -53,77 +53,47 @@ Uses 4 ring oscillators with different prime stage counts (13,17, 19, 23 inverte
 # Login: xilinx / xilinx
 sudo ip addr add 192.168.2.99/24 dev eth0
 ```
+### Results
+| Metric | Result | Target | Pass/Fail | Meaning |
+|--------|--------|--------|-----------|---------|
+| Entropy | 7.857 bits/byte | >7 | PASS | Information density is near perfect (8 bits/byte) |
+| Mean | 127.55 | 127 +/- 0.5 | PASS | Balance of 0s and 1s |
+| Throughput | 1.2MB/s | > 100kB/s | PASS | High-speed generation |
 
-#### 4. Setup Mac Network
+### Quick Start
+
+1. **Build & Deploy**
+
+**Windows (Vivado):** <br>
+- Run/Generate bitstream in vivado
+- Program in vivado
+
+**Mac/Linux (Software)** <br>
+- Connect via Ethernet
+- Run `make upload` to send driver to board
+
+2. **Run Driver**
+SSH into board and compile driver
 ```bash
-sudo ifconfig en26 192.168.2.1 netmask 255.255.255.0 up
-ping 192.168.2.99
+ssh xilinx@...
+g++ -o test_hsm test_hsm.cpp
 ```
 
-#### 5. Upload and Test (Mac)
+3. **Usage Modes**
+**Health Check (Text):** <br>
+Verifies hw responsiveness and prints samples in hex
 ```bash
-scp sw/drivers/test_trng.cpp xilinx@192.168.2.99:~/
-ssh xilinx@192.168.2.99
-g++ -o test_trng test_trng.cpp
-sudo ./test_trng
+sudo ./test_hsm
 ```
 
-### Makefile Automation
-
-#### Windows
+**Binary Capture (Analysis):**
+Streams raw binary data to stdout (pipe to file).
 ```bash
-make package    # Copy bitstream to deploy/
-make program    # Program FPGA via JTAG (requires Vivado in PATH)
-make serial     # Open PuTTY serial console
-```
-
-#### Mac
-```bash
-make ping       # Check board connectivity
-make upload     # Upload C++ drivers
-make test-trng  # Compile and run TRNG test
-make ssh        # SSH to board
-```
-
-## Example Output
-```
-TRNG Test Starting...
-
-[TEST 1] Counter Register
-    Counter: 881091339 -> 881209352
- (diff: 118013)
-    [PASS]: Counter incrementing
-
-[TEST 2] Ring Oscillators
-    Status: 0x21
-    Oscillators Running: Yes
-    Raw Osc Bits [7:4]: 0x2
-
-    Sampling Raw Oscillator Bits:
-        Sample 1: 0xB
-        Sample 2: 0xA
-        Sample 3: 0xC
-        Sample 4: 0x7
-        Sample 5: 0x2
-
- [TEST 3] Random Number Generation
-    Collecting 32 random bits...
-    Sample Count: 32
-    Random Value: 0xC31703EB
-
- [TEST 4] Collecting Multiple Random Values
-    Random[1]: 0xB24BDF18
-    Random[2]: 0x914F9FBE
-    Random[3]: 0x86805472
-    Random[4]: 0xC90CAD2F
-    Random[5]: 0x8F20B951
-
-TRNG Test Completed.
+sudo ./test_hsm --binary > random_data.bin
 ```
 
 ## Build Requirements
-
-- PYNQ-Z2 board with default PYNQ image
-- USB-JTAG Connection for bitstream loading
-- USB-Ethernet adapter for network
-- PuTTy or some serial interface 
+* PYNQ-Z2 Board w/ image
+* Vivado 2025.2
+* `g++` on board to compile drivers
+* `ent` (rec'd) for statistical analysis
