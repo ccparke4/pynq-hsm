@@ -125,9 +125,6 @@
           <Attr Name="UsedIn" Val="implementation"/>
           <Attr Name="UsedIn" Val="simulation"/>
         </FileInfo>
-        <CompFileExtendedInfo CompFileName="hsm_system_design.bd" FileRelPathName="ip\hsm_system_design_axi_smc_0\hsm_system_design_axi_smc_0.xci">
-          <Proxy FileSetName="hsm_system_design_axi_smc_0"/>
-        </CompFileExtendedInfo>
         <CompFileExtendedInfo CompFileName="hsm_system_design.bd" FileRelPathName="ip\hsm_system_design_my_hsm_0\hsm_system_design_my_hsm_0.xci">
           <Proxy FileSetName="hsm_system_design_my_hsm_0"/>
         </CompFileExtendedInfo>
@@ -212,12 +209,6 @@
         <Option Name="UseBlackboxStub" Val="1"/>
       </Config>
     </FileSet>
-    <FileSet Name="hsm_system_design_axi_smc_0" Type="BlockSrcs" RelSrcDir="$PSRCDIR/hsm_system_design_axi_smc_0" RelGenDir="$PGENDIR/hsm_system_design_axi_smc_0">
-      <Config>
-        <Option Name="TopModule" Val="hsm_system_design_axi_smc_0"/>
-        <Option Name="UseBlackboxStub" Val="1"/>
-      </Config>
-    </FileSet>
     <FileSet Name="hsm_system_design_my_hsm_0" Type="BlockSrcs" RelSrcDir="$PSRCDIR/hsm_system_design_my_hsm_0" RelGenDir="$PGENDIR/hsm_system_design_my_hsm_0">
       <Config>
         <Option Name="TopModule" Val="hsm_system_design_my_hsm_0"/>
@@ -274,19 +265,11 @@
       <Report Name="ROUTE_DESIGN.REPORT_METHODOLOGY" Enabled="1"/>
       <RQSFiles/>
     </Run>
-    <Run Id="hsm_system_design_axi_smc_0_synth_1" Type="Ft3:Synth" SrcSet="hsm_system_design_axi_smc_0" Part="xc7z020clg400-1" ConstrsSet="hsm_system_design_axi_smc_0" Description="Vivado Synthesis Defaults" AutoIncrementalCheckpoint="false" WriteIncrSynthDcp="false" Dir="$PRUNDIR/hsm_system_design_axi_smc_0_synth_1" IncludeInArchive="true" IsChild="false" AutoIncrementalDir="$PSRCDIR/utils_1/imports/hsm_system_design_axi_smc_0_synth_1" AutoRQSDir="$PSRCDIR/utils_1/imports/hsm_system_design_axi_smc_0_synth_1" ParallelReportGen="true">
-      <Strategy Version="1" Minor="2">
-        <StratHandle Name="Vivado Synthesis Defaults" Flow="Vivado Synthesis 2025"/>
-        <Step Id="synth_design"/>
-      </Strategy>
-      <GeneratedRun Dir="$PRUNDIR" File="gen_run.xml"/>
-      <ReportStrategy Name="Vivado Synthesis Default Reports" Flow="Vivado Synthesis 2025"/>
-      <Report Name="ROUTE_DESIGN.REPORT_METHODOLOGY" Enabled="1"/>
-      <RQSFiles/>
-    </Run>
     <Run Id="hsm_system_design_my_hsm_0_synth_1" Type="Ft3:Synth" SrcSet="hsm_system_design_my_hsm_0" Part="xc7z020clg400-1" ConstrsSet="hsm_system_design_my_hsm_0" Description="Vivado Synthesis Defaults" AutoIncrementalCheckpoint="false" WriteIncrSynthDcp="false" Dir="$PRUNDIR/hsm_system_design_my_hsm_0_synth_1" IncludeInArchive="true" IsChild="false" AutoIncrementalDir="$PSRCDIR/utils_1/imports/hsm_system_design_my_hsm_0_synth_1" AutoRQSDir="$PSRCDIR/utils_1/imports/hsm_system_design_my_hsm_0_synth_1" ParallelReportGen="true">
       <Strategy Version="1" Minor="2">
-        <StratHandle Name="Vivado Synthesis Defaults" Flow="Vivado Synthesis 2025"/>
+        <StratHandle Name="Vivado Synthesis Defaults" Flow="Vivado Synthesis 2025">
+          <Desc>Vivado Synthesis Defaults</Desc>
+        </StratHandle>
         <Step Id="synth_design"/>
       </Strategy>
       <GeneratedRun Dir="$PRUNDIR" File="gen_run.xml"/>
@@ -346,26 +329,11 @@
       <Report Name="ROUTE_DESIGN.REPORT_METHODOLOGY" Enabled="1"/>
       <RQSFiles/>
     </Run>
-    <Run Id="hsm_system_design_axi_smc_0_impl_1" Type="Ft2:EntireDesign" Part="xc7z020clg400-1" ConstrsSet="hsm_system_design_axi_smc_0" Description="Default settings for Implementation." AutoIncrementalCheckpoint="false" WriteIncrSynthDcp="false" SynthRun="hsm_system_design_axi_smc_0_synth_1" IncludeInArchive="false" IsChild="false" GenFullBitstream="true" AutoIncrementalDir="$PSRCDIR/utils_1/imports/hsm_system_design_axi_smc_0_impl_1" AutoRQSDir="$PSRCDIR/utils_1/imports/hsm_system_design_axi_smc_0_impl_1" ParallelReportGen="true">
-      <Strategy Version="1" Minor="2">
-        <StratHandle Name="Vivado Implementation Defaults" Flow="Vivado Implementation 2025"/>
-        <Step Id="init_design"/>
-        <Step Id="opt_design"/>
-        <Step Id="power_opt_design"/>
-        <Step Id="place_design"/>
-        <Step Id="post_place_power_opt_design"/>
-        <Step Id="phys_opt_design"/>
-        <Step Id="route_design"/>
-        <Step Id="post_route_phys_opt_design"/>
-        <Step Id="write_bitstream"/>
-      </Strategy>
-      <ReportStrategy Name="Vivado Implementation Default Reports" Flow="Vivado Implementation 2025"/>
-      <Report Name="ROUTE_DESIGN.REPORT_METHODOLOGY" Enabled="1"/>
-      <RQSFiles/>
-    </Run>
     <Run Id="hsm_system_design_my_hsm_0_impl_1" Type="Ft2:EntireDesign" Part="xc7z020clg400-1" ConstrsSet="hsm_system_design_my_hsm_0" Description="Default settings for Implementation." AutoIncrementalCheckpoint="false" WriteIncrSynthDcp="false" SynthRun="hsm_system_design_my_hsm_0_synth_1" IncludeInArchive="false" IsChild="false" GenFullBitstream="true" AutoIncrementalDir="$PSRCDIR/utils_1/imports/hsm_system_design_my_hsm_0_impl_1" AutoRQSDir="$PSRCDIR/utils_1/imports/hsm_system_design_my_hsm_0_impl_1" ParallelReportGen="true">
       <Strategy Version="1" Minor="2">
-        <StratHandle Name="Vivado Implementation Defaults" Flow="Vivado Implementation 2025"/>
+        <StratHandle Name="Vivado Implementation Defaults" Flow="Vivado Implementation 2025">
+          <Desc>Default settings for Implementation.</Desc>
+        </StratHandle>
         <Step Id="init_design"/>
         <Step Id="opt_design"/>
         <Step Id="power_opt_design"/>

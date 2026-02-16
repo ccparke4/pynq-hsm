@@ -1,7 +1,7 @@
 {
   "design": {
     "design_info": {
-      "boundary_crc": "0xCC6CFA53F622E079",
+      "boundary_crc": "0xCC6CFA53B4580162",
       "device": "xc7z020clg400-1",
       "gen_directory": "../../../../hsm_system_top.gen/sources_1/bd/hsm_system_design",
       "name": "hsm_system_design",
@@ -1967,6 +1967,9 @@
             "vlnv_bus_definition": "xilinx.com:interface:aximm:1.0",
             "vlnv": "xilinx.com:interface:aximm_rtl:1.0",
             "parameters": {
+              "MAX_BURST_LENGTH": {
+                "value": "1"
+              },
               "NUM_READ_OUTSTANDING": {
                 "value": "8"
               },
@@ -1980,6 +1983,9 @@
                 "value": "1"
               },
               "RUSER_BITS_PER_BYTE": {
+                "value": "0"
+              },
+              "SUPPORTS_NARROW_BURST": {
                 "value": "0"
               },
               "WUSER_BITS_PER_BYTE": {

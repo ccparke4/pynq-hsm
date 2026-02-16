@@ -1,5 +1,4 @@
 `timescale 1ns/1ps
-// here we sample the TRNG, N osc of different lengths
 
 (* KEEP_HIERARCHY = "TRUE" *)
 module trng_sampler(
@@ -13,16 +12,21 @@ module trng_sampler(
 
     // outputs
     output  wire [3:0]  raw_osc,        // raw oscillator outputs dbg
-    output  reg  [31:0] random_out,     // accumulatd random data
+    output  reg  [31:0] random_out,     // accumulated random data
     output  reg  [31:0] sample_count,   // number of samples
+    output  reg         valid,          // handshake
     output  wire        osc_running     // osc status
 );
 
-    // osc outputs
+    // --- CONFIG ---
+    // Decimation: Wait N cycles between samples to let jitter accumulate
+    // 7 means sampling every 8th (100MHz / 8 = 12.5MHz)
+    localparam DECIMATION_WAIT = 7;
+
+    // --- OSCILLATORS ---
     wire osc0, osc1, osc2, osc3;
 
     // inst. 4 diff. oscillators w/ diffrent prime stage counts
-    // different lengths = different freqs = uncorrelated jitter
     ring_osc #(.STAGES(13)) ro0 (.enable(enable), .osc_out(osc0));
     ring_osc #(.STAGES(17)) ro1 (.enable(enable), .osc_out(osc1));
     ring_osc #(.STAGES(19)) ro2 (.enable(enable), .osc_out(osc2));
@@ -32,9 +36,8 @@ module trng_sampler(
     assign raw_osc = {osc3, osc2, osc1, osc0};
     assign osc_running = enable;
 
-    // synchronizers for metastability (simple 2-stage)
+    // --- SYNCHRONIZER & XOR ---
     reg [3:0] osc_sync1, osc_sync2;
-
     always_ff @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
             osc_sync1 <= 4'b0;
@@ -47,78 +50,100 @@ module trng_sampler(
 
     wire raw_bit = ^osc_sync2;          // XOR all bits
 
-    // --- Von Neumann Debiaser ---
-    // we need to capture 2 bits to make 1 decision
+    // --- DECIMATOR ---
+    reg [3:0] dec_counter;
+    reg       sample_pulse;             // pulse when we want to sample a bit
+
+    always @(posedge clk or negedge rst_n) begin
+        if (!rst_n) begin
+            dec_counter  <= '0;
+            sample_pulse <= 0;
+        end else if(enable) begin
+            if (dec_counter == DECIMATION_WAIT) begin
+                dec_counter  <= '0;
+                sample_pulse <= 1;
+            end else begin
+                dec_counter  <= dec_counter + 1;
+                sample_pulse <= 0;
+            end
+        end else begin
+            // SAFETY FIX: Ensure pulse is killed if enable drops
+            sample_pulse <= 0;
+        end
+    end
+
+    // --- VON NEUMANN DEBIASER ---
     reg [1:0]   vn_buffer;      // stores pair of bits
-    reg         vn_count;       // track if we have 0,1,2 bits
-    reg         valid_bit;      // final debiased bit
-    reg         valid_strobe;   // pulse when valid_bit is ready
+    reg         vn_state;       // 0=waiting, 1=waiting for bit
+    reg         vn_valid_bit;   // random bit 
+    reg         vn_valid_pulse; // pulse when valid_bit is found
 
     always_ff @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
-            vn_count        <= '0;
-            valid_strobe    <= '0;
-            valid_bit       <= '0;
-        end else if (enable) begin
-            valid_strobe <= 0;
+            vn_state       <= '0;
+            vn_valid_pulse <= '0;
+            vn_valid_bit   <= '0;
+            vn_buffer      <= '0;
+        end else if (sample_pulse) begin
+            vn_valid_pulse <= 0;
 
-            // simple state machine: toggle between capturing bit A & B
-            vn_count <= ~vn_count;  // toggle count each cycle
-
-            if (vn_count == 0) begin
-                vn_buffer[0] <= raw_bit;   // capture bit A
+            if (vn_state == 0) begin
+                vn_buffer[0] <= raw_bit;
+                vn_state     <= 1;
             end else begin
-                vn_buffer[1] <= raw_bit;    // capture bit B
+                // have bit A (buffer[0]) and Bit B (raw_bit)
+                vn_state <= 0;
 
-                // analyze the pair (Von Neumann logic)
-                if (vn_buffer[0] == 1'b0 && raw_bit == 1'b1) begin
-                    valid_bit <= 0;
-                    valid_strobe <= 1;  // new bit ready
-                end else if (vn_buffer[0] == 1'b1 && raw_bit == 1'b0) begin
-                    valid_bit <= 1;
-                    valid_strobe <= 1;  // new bit ready
+                // Von Neumann Logic:
+                // 0 -> 1 : output 0
+                // 1 -> 0 : output 1
+                // else: discard
+                if (vn_buffer[0] == 0 && raw_bit == 1) begin
+                    vn_valid_bit   <= 0; 
+                    vn_valid_pulse <= 1; // valid bit found
+                end else if (vn_buffer[0] == 1 && raw_bit == 0) begin
+                    vn_valid_bit   <= 1; 
+                    vn_valid_pulse <= 1; // valid bit found
                 end
-                // if 00 or 11 do nothing and discard bits (no strobe)
             end
+        end else begin
+            vn_valid_pulse <= 0;   // clear pulse when not sampling
         end
     end
 
     // --- Output Accumulator ---
-    // only shift in data if SW asked for it AND we have a valid de-biased bit
+    reg [5:0] bit_count;   // counts from 0 -> 32
 
-    // detect SW req.
-    reg sample_trig_d;
-    always_ff @(posedge clk) sample_trig_d <= sample_trig;
-    wire software_request = sample_trig & ~sample_trig_d;  // rising edge detect
-
-    reg         waiting_for_bit;    // track if we're waiting for a valid bit after SW req
-    reg [4:0]   bit_counter;        // Count how many bits
+    // detect rising edge of sample_trig
+    reg trig_d;
+    always_ff @(posedge clk) trig_d <= sample_trig;
+    wire start_collection = (sample_trig && !trig_d); // pulse on rising edge
 
     always_ff @(posedge clk or negedge rst_n) begin
         if (!rst_n || clear) begin
             random_out   <= '0;
             sample_count <= '0;
-            waiting_for_bit <= '0;
+            bit_count    <= '0;
+            valid        <= 0;
         end else begin
-            // start collecting on sw req
-            if (software_request) begin 
-                waiting_for_bit <= 1;
-                bit_counter <= 5'd0;
+            // 1. Start Collection
+            if (start_collection) begin
+                valid     <= 0;    // clear valid until we have a new sample
+                bit_count <= 0;
             end
 
-            // waiting and debiaser gives valid bit...
-            if (waiting_for_bit && valid_strobe) begin
-                random_out  <= {random_out[30:0], valid_bit};  // shift in new bit
-                bit_counter <= bit_counter + 1;
+            // 2. Shift in bits (if not done)
+            if (!valid && vn_valid_pulse) begin
+                random_out <= {random_out[30:0], vn_valid_bit}; // shift in new bit
+                bit_count  <= bit_count + 1; 
+            end
 
-                // stop when have 32 bits
-                if (bit_counter == 5'd31) begin
-                    waiting_for_bit <= 0;  // done, wait for next SW req
-                    sample_count <= sample_count + 1; // count # of samples taken
-                end
+            // 3. Finish
+            if (bit_count == 32 && !valid) begin
+                valid        <= 1;    // new random number ready
+                sample_count <= sample_count + 1;
             end
         end
     end
-
 
 endmodule
