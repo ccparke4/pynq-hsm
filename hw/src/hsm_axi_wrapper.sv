@@ -63,6 +63,13 @@ module hsm_axi_wrapper #
     wire [31:0] trng_sample_count;
     wire        trng_osc_running;
 
+    // Health monitor signals (post VN)
+    wire        trng_health_valid_bit;
+    wire        trng_health_valid_strobe;
+    wire        trng_health_fail;
+    wire        trng_health_rct_fail;
+    wire        trng_health_apt_fail;
+
     // Control bit extraction
     wire ctrl_enable    = slv_reg_ctrl[0];
     wire ctrl_sample    = slv_reg_ctrl[1];
@@ -70,15 +77,29 @@ module hsm_axi_wrapper #
 
     // === TRNG inst. ===
     trng_sampler trng_inst (
+        .clk                (S_AXI_ACLK),
+        .rst_n              (S_AXI_ARESETN),
+        .enable             (ctrl_enable),
+        .sample_trig        (ctrl_sample),
+        .clear              (ctrl_clear),
+        .raw_osc            (trng_raw_osc),
+        .random_out         (trng_random),
+        .sample_count       (trng_sample_count),
+        .osc_running        (trng_osc_running),
+        .health_valid_bit   (trng_health_valid_bit),
+        .health_valid_strobe(trng_health_valid_strobe)
+    );
+
+    // === Health Monitor inst. ===
+    trng_health health_inst (
         .clk            (S_AXI_ACLK),
         .rst_n          (S_AXI_ARESETN),
-        .enable         (ctrl_enable),
-        .sample_trig    (ctrl_sample),
+        .valid_bit      (trng_health_valid_bit),
+        .valid_strobe   (trng_health_valid_strobe),
         .clear          (ctrl_clear),
-        .raw_osc        (trng_raw_osc),
-        .random_out     (trng_random),
-        .sample_count   (trng_sample_count),
-        .osc_running    (trng_osc_running)
+        .rct_fail       (trng_health_rct_fail),
+        .apt_fail       (trng_health_apt_fail),
+        .health_fail    (trng_health_fail)
     );
 
     // === Free running counter for debug ===
@@ -94,8 +115,13 @@ module hsm_axi_wrapper #
         slv_reg_status = 32'h0;
         slv_reg_status[0] = trng_osc_running;
         slv_reg_status[7:4] = trng_raw_osc;
+        // health monitor flags are ~sticky~
+        slv_reg_status[8] = trng_health_fail;       // overall health fail (APT or RCT)
+        slv_reg_status[9] = trng_health_rct_fail;   // repetition count test fail
+        slv_reg_status[10] = trng_health_apt_fail;  // adaptive proportion test fail
     end
 
+    // === Core AXI Logic ===
     // --- Internal signals for handshaking ---
     logic axi_awready;
     logic axi_wready;

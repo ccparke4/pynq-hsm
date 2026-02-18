@@ -14,8 +14,11 @@ module trng_sampler(
     output  wire [3:0]  raw_osc,        // raw oscillator outputs dbg
     output  reg  [31:0] random_out,     // accumulated random data
     output  reg  [31:0] sample_count,   // number of samples
-    output  reg         valid,          // handshake
-    output  wire        osc_running     // osc status
+    output  wire        osc_running,     // osc status
+
+    // healt monitor (post VN biased stream)
+    output  wire        health_valid_bit,   // valid bit from health monitor
+    output  wire        health_valid_strobe // pulse when health monitor has valid bit
 );
 
     // --- CONFIG ---
@@ -52,22 +55,26 @@ module trng_sampler(
 
     // --- DECIMATOR ---
     reg [3:0] dec_counter;
+    reg [3:0] dec_threshold;            // random each cycle
     reg       sample_pulse;             // pulse when we want to sample a bit
 
     always @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
-            dec_counter  <= '0;
-            sample_pulse <= 0;
+            dec_counter     <= '0;
+            sample_pulse    <= 0;
+            dec_threshold   <= 4'd7;
         end else if(enable) begin
-            if (dec_counter == DECIMATION_WAIT) begin
-                dec_counter  <= '0;
-                sample_pulse <= 1;
+            sample_pulse    <= 0;
+            if (dec_counter >= dec_threshold) begin
+                dec_counter     <= '0;
+                dec_threshold   <= {3'd6, raw_bit} + 4'd6;  // 6-7 cycles
+                sample_pulse    <= 1;
             end else begin
-                dec_counter  <= dec_counter + 1;
-                sample_pulse <= 0;
+                dec_counter <= dec_counter + 1;
             end
         end else begin
             // SAFETY FIX: Ensure pulse is killed if enable drops
+            dec_counter  <= '0;
             sample_pulse <= 0;
         end
     end
@@ -111,8 +118,14 @@ module trng_sampler(
         end
     end
 
+    // NEW - added health monitor tabs to internal VN signals
+    assign health_valid_bit     = vn_valid_bit;
+    assign health_valid_strobe  = vn_valid_pulse;
+
+
     // --- Output Accumulator ---
     reg [5:0] bit_count;   // counts from 0 -> 32
+    reg       valid;       // high when random_out is valid
 
     // detect rising edge of sample_trig
     reg trig_d;
