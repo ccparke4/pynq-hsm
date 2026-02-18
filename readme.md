@@ -30,7 +30,7 @@ The HSM is implemented in HDL and communicates with the Processing system via AX
 Randomness was verified using the **ENT** statistical analysis tool.
 
 ### Results
-| Metric | v0.2.0 | v0.3.0 (broken decimator) | **v0.3.1** | Industry Std | Verdict |
+| Metric | v0.2.0 | v0.3.0 (broken decimator) | **v0.3.1** | Target | Verdict |
 |--------|--------|--------------------------|------------|--------------|---------|
 | **Entropy** | 7.935 | 7.636 | **7.973** | > 7.9 | PASS |
 | **Compression** | 0% | 4% | **0%** | 0% | PASS |
