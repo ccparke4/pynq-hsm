@@ -43,6 +43,13 @@ namespace Ctrl {
     constexpr uint32_t CLEAR  = 1 << 2;
 }
 
+namespace Status {
+    constexpr uint32_t OSC_RUNNING  = 1 << 0;
+    constexpr uint32_t HEALTH_FAIL  = 1 << 8;   // combined health failure
+    constexpr uint32_t RCT_FAIL     = 1 << 9;   // repetition count test
+    constexpr uint32_t APT_FAIL     = 1 << 10; 
+}
+
 /* ===== SAFE DRIVER CLASS ===== */
 class PynqHSM {
 private:
@@ -81,6 +88,20 @@ public:
 
     uint32_t readReg(RegOffset offset) {
         return _is_mapped ? _base_ptr[offset / 4] : 0;
+    }
+
+    // --- Health status check ---
+    bool checkHealth(bool verbose = false) {
+        uint32_t status = readReg(REG_STATUS);
+        if (verbose) {
+            bool osc_ok = status & Status::OSC_RUNNING;
+            bool rct_ok = !(status & Status::RCT_FAIL);
+            bool apt_ok = !(status & Status::APT_FAIL);
+            std::cout << "  OSC Running : " << (osc_ok  ? "[OK]" : "[FAIL]") << std::endl;
+            std::cout << "  RCT Test    : " << (rct_ok  ? "[OK]" : "[FAIL] - Oscillator may be locked") << std::endl;
+            std::cout << "  APT Test    : " << (apt_ok  ? "[OK]" : "[FAIL] - Bit distribution skewed") << std::endl;
+        }
+        return !(status & Status::HEALTH_FAIL);
     }
 
     // --- Timeout implementation ---
@@ -139,41 +160,90 @@ void test_trng_health(PynqHSM& hsm) {
 
 /* ===== MAIN ===== */
 int main(int argc, char* argv[]) {
-    // 1. Check binary mode
+    // 1. Check mode
     bool binary_mode = false;
-    if (argc > 1 && std::string(argv[1]) == "--binary") {
-        binary_mode = true;
-        // FIXED: Do NOT print anything here!
-    } 
+    bool health_mode = false;
+    if (argc > 1) {
+        std::string arg = argv[1];
+        if (arg == "--binary") binary_mode = true;
+        if (arg == "--health") health_mode = true;
+    }
 
     signal(SIGINT, signal_handler);
 
     PynqHSM hsm(HSM_BASE_ADDR, HSM_SIZE);
 
-    // Only run health tests in Text Mode
+    // --- Health Monitor Mode (Text Only) ---
+    if (health_mode) {
+            std::cout << "PYNQ HSM Health Monitor:" << std::endl;
+
+            // enable oscillators 
+            hsm.writeReg(REG_CTRL, Ctrl::ENABLE);
+
+            // clear any latched startup fails
+            hsm.writeReg(REG_CTRL, Ctrl::ENABLE | Ctrl::CLEAR);
+            hsm.writeReg(REG_CTRL, Ctrl::ENABLE); // re-enable after clear
+
+            sleep(1); // give it a moment to stabilize
+
+            while (!stop_requested) {
+                std::cout << "\033[2J\033[H"; // Clear screen and move cursor to top-left
+                std::cout <<"--- TRNG Health Status ---" << std::endl;
+                hsm.checkHealth(true);
+                bool healthy = !(hsm.readReg(REG_STATUS) & Status::HEALTH_FAIL);
+                std::cout << "--------------------------" << std::endl;
+                std::cout << "  Sample Count: 0x" << std::hex << hsm.readReg(REG_SAMPLE_CNT) << std::endl;
+                std::cout.flush();
+                sleep(1);
+            }
+            return 0;
+        }
+
+    // --- Normal Mode (Text Output) ---
     if (!binary_mode) {
         std::cout << "PYNQ HSM Driver Test Starting..." << std::endl;
         std::cout << "Press Ctrl+C to stop." << std::endl;
+        
+        std::cout << "\n--- TRNG Health Status ---" << std::endl;
+        bool healthy = hsm.checkHealth(true);
+        if (!healthy) {
+            std::cerr << "[WARN] Health monitor reports failure. Output may be compromised." << std::endl;
+            std::cerr << "       Run with ctrl_clear to reset, then re-check." << std::endl;
+        } else {
+            std::cout << "  Overall     : [OK] TRNG healthy" << std::endl;
+        }
+        std::cout << "--------------------------\n" << std::endl;
         test_trng_health(hsm);
     }
 
     while (!stop_requested) {
+        // check health every 1k samples in binary mode
+        if (binary_mode) {
+            static int health_check_count = 0;
+            if (++health_check_count >= 1000) {
+                health_check_count = 0;
+                if (!hsm.checkHealth(false)) {
+                    std::cerr << "[ERROR] Health monitor failure detected mid-stream. Aborting." << std::endl;
+                    break;
+                }
+            }
+        }
+
         uint32_t random_value = hsm.getTrngRandom();
-        
+
         if (random_value == 0xFFFFFFFF) {
             if (!binary_mode) std::cerr << "[ERROR] Hardware Timeout." << std::endl;
             break;
         }
 
         if (binary_mode) {
-            // Write raw bytes for analysis
+            // write raw bytes for post-run analysis
             std::cout.write(reinterpret_cast<const char*>(&random_value), sizeof(random_value));
         } else {
-            // Text mode for debug
+            // text mode for debug
             std::cout << "0x" << std::hex << random_value << std::endl;
         }
     }
-
     if (!binary_mode) {
         std::cout << "PYNQ HSM Driver Test Ending..." << std::endl;
     }

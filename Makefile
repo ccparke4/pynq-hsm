@@ -74,21 +74,50 @@ endif
 # ============ MAC ONLY ============
 ifeq ($(DETECTED_OS),Mac)
 
-ping:
-	@ping -c 1 -W 1 $(BOARD_IP) > /dev/null 2>&1 && echo "Board is UP" || echo "Board is DOWN"
+BIND_IP 	:= 192.168.2.1
+ETH_IFACE := $(shell ifconfig | \
+               awk '/^en[0-9]+:/{iface=$$1; gsub(":","",iface)} \
+                    /1000baseT.*full-duplex/{print iface; exit}' \
+               2>/dev/null || echo "en26")
+SSH_CMD		:= ssh -o BindAddress=$(BIND_IP) -o ConnectTimeout=5
+SCP_CMD		:= scp -o BindAddress=$(BIND_IP) -o ConnectTimeout=5
 
-ssh:
-	ssh $(BOARD_USER)@$(BOARD_IP)
+.PHONY: setup-network ping ssh upload test test-trng
 
-upload:
+setup-network:
+	@if [ -z "$(ETH_IFACE)" ]; then \
+		echo "ERROR: Could not detect ethernet interface. Set ETH_IFACE manually."; \
+		exit 1; \
+	fi
+	@echo "Detected ethernet interface: $(ETH_IFACE)"
+	@sudo ifconfig $(ETH_IFACE) $(BIND_IP) netmask 255.255.255.0
+	@ping -c 2 -W 1 $(BOARD_IP) > /dev/null 2>&1 \
+		&& echo "Board $(BOARD_IP) is reachable" \
+		|| (echo "ERROR: Board not responding. Check cable/boot." && exit 1)
+
+ping: setup-network
+	@echo "Board is UP"
+
+ssh: setup-network
+	$(SSH_CMD) $(BOARD_USER)@$(BOARD_IP)
+
+upload: setup-network
 	@echo "Uploading drivers to $(BOARD_USER)@$(BOARD_IP)..."
-	scp sw/drivers/*.cpp $(BOARD_USER)@$(BOARD_IP):~/
+	$(SCP_CMD) sw/drivers/*.cpp $(BOARD_USER)@$(BOARD_IP):~/
 	@echo "Done."
 
-test:
-	ssh -t $(BOARD_USER)@$(BOARD_IP) 'g++ -o test_hsm test_hsm.cpp && sudo ./test_hsm'
+test: upload
+	$(SSH_CMD) -t $(BOARD_USER)@$(BOARD_IP) 'g++ -o test_hsm test_hsm.cpp && sudo ./test_hsm'
 
-test-trng:
-	ssh -t $(BOARD_USER)@$(BOARD_IP) 'g++ -o test_trng test_trng.cpp && sudo ./test_trng'
+test-trng: upload
+	$(SSH_CMD) -t $(BOARD_USER)@$(BOARD_IP) 'g++ -o test_trng test_trng.cpp && sudo ./test_trng'
+
+capture: upload
+	@echo "Capturing 1MB RNG data..."
+	$(SSH_CMD) $(BOARD_USER)@$(BOARD_IP) \
+		'sudo ./test_hsm --binary | dd of=rng_data.bin bs=1024 count=1000 iflag=fullblock'
+	$(SCP_CMD) $(BOARD_USER)@$(BOARD_IP):~/rng_data.bin .
+	@echo "Running ENT analysis..."
+	ent rng_data.bin
 
 endif
