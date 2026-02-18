@@ -35,7 +35,7 @@ Randomness was verified using the **ENT** statistical analysis tool.
 | **Entropy** | 7.935 | 7.636 | **7.973** | > 7.9 | PASS |
 | **Compression** | 0% | 4% | **0%** | 0% | PASS |
 | **Chi-Square** | 83,908 | 546,078 | **37,929** | < 100k | PASS |
-| **Mean** | 127.39 | 127.80 | **128.35** | 127.5 | ✅ PASS |
+| **Mean** | 127.39 | 127.80 | **128.35** | 127.5 | PASS |
 | **Serial Correlation** | - | -0.131 | **0.016** | ~0.0 | PASS |
 
 ### Quick Start
