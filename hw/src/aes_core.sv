@@ -127,7 +127,7 @@ logic [127:0] mix_out;
 
 always_comb begin
     mix_out[127:96] = mix_col(sub_shift_out[127:96]);   // col0
-    mix_out[95:64]  = mix_co(sub_shift_out[95:64]);    // col1
+    mix_out[95:64]  = mix_col(sub_shift_out[95:64]);    // col1
     mix_out[63:32]  = mix_col(sub_shift_out[63:32]);    // col2
     mix_out[31:0]   = mix_col(sub_shift_out[31:0]);     // col3
 end
@@ -254,7 +254,7 @@ always_ff @(posedge clk or negedge rst_n) begin
                     W[7] <= key[31:0];
 
                     key_idx <= 8; // next word to generate
-                    state   <= KEY_EXP;
+                    state   <= KEY_EXPAND;
                     busy    <= 1;
                 end
             end
