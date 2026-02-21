@@ -42,6 +42,12 @@ module aes_core (
 // 128'b buses to route data to/from 16 Sboxes
 logic [127:0] sbox_in, sbox_out;
 
+// used by FSM
+reg [2:0] state;
+reg [5:0] key_idx;      // counts from 0 to 59 during KEY_EXP
+reg [3:0] round_cnt;    // counts from 0 to 14 during ENCRYPT
+reg [127:0] state_reg;  // holds current state during encryption rounds
+
 // gen 16 parallel S-boxes for SubBytes step
 genvar i;
 generate
@@ -218,11 +224,6 @@ localparam [2:0]
     READY       = 3'd2,
     ENCRYPT     = 3'd3,
     DONE        = 3'd4;
-
-reg [2:0] state;
-reg [5:0] key_idx;      // counts from 0 to 59 during KEY_EXP
-reg [3:0] round_cnt;    // counts from 0 to 14 during ENCRYPT
-reg [127:0] state_reg;  // holds current state during encryption rounds
 
 // =========== FSM & Datapath ============
 always_ff @(posedge clk or negedge rst_n) begin

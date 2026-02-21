@@ -48,6 +48,8 @@ TB_CORE     := $(SIM_DIR)/tb_aes_core.sv
 
 # Generated vector files =======================================
 GOLDEN_SBOX := $(VEC_DIR)/sbox_golden.hex
+GOLDEN_KAT  := $(VEC_DIR)/aes_kat.hex
+GOLDEN_KEXP := $(VEC_DIR)/aes_key_exp.hex
 
 # Phony targets ================================================
 .PHONY: sim sim-sbox sim-core vectors check-sim clean-sim sim-help
@@ -58,8 +60,7 @@ sim: sim-sbox sim-core
 	@echo " All simulation stages passed"
 	@echo "================================="
 
-# FIX: vectors: not vectors :=
-vectors: $(GOLDEN_SBOX)
+vectors: $(GOLDEN_SBOX) $(GOLDEN_KAT)
 
 $(GOLDEN_SBOX):
 	@echo "================================="
@@ -69,6 +70,16 @@ $(GOLDEN_SBOX):
 	$(PYTHON) $(SCRIPTS_DIR)/gen_sbox_golden.py
 	@echo ""
 	@echo "   Done -> $(GOLDEN_SBOX)"
+	@echo "================================="
+
+$(GOLDEN_KAT):
+	@echo "================================="
+	@echo " Generating AES KAT vector files"
+	@echo "================================="
+	@$(PYTHON) -c "import os; os.makedirs('$(VEC_DIR)', exist_ok=True)"
+	$(PYTHON) $(SCRIPTS_DIR)/gen_aes_kat.py
+	@echo ""
+	@echo "   Done -> $(GOLDEN_KAT), $(GOLDEN_KEXP)"
 	@echo "================================="
 
 # Simulation recipe ============================================
@@ -95,7 +106,7 @@ sim-sbox: $(GOLDEN_SBOX) $(DUT_SBOX) $(TB_SBOX)
 	$(call run_sim,tb_aes_sbox,$(DUT_SBOX),$(TB_SBOX))
 
 # Stage 2 — Full AES-256 core KAT
-sim-core: $(GOLDEN_SBOX) $(DUT_CORE) $(TB_CORE)
+sim-core: $(GOLDEN_KAT) $(GOLDEN_KEXP) $(DUT_CORE) $(TB_CORE)
 	$(call run_sim,tb_aes_core,$(DUT_CORE),$(TB_CORE))
 
 # Stage 3 — AXI wrapper (uncomment when TB is written)
@@ -113,13 +124,20 @@ check-sim:
 	@$(PYTHON) -c "import os; print('   $(SRC_DIR): EXISTS' if os.path.isdir('$(SRC_DIR)') else '   $(SRC_DIR): NOT FOUND')"
 	@echo "   Vectors:"
 	@$(PYTHON) -c "import os; print('   sbox_golden.hex: EXISTS' if os.path.exists('$(GOLDEN_SBOX)') else '   sbox_golden.hex: NOT FOUND - run make vectors')"
+	@$(PYTHON) -c "import os; print('   aes_kat.hex:     EXISTS' if os.path.exists('$(GOLDEN_KAT)') else '   aes_kat.hex:     NOT FOUND - run make vectors')"
+	@$(PYTHON) -c "import os; print('   aes_key_exp.hex: EXISTS' if os.path.exists('$(GOLDEN_KEXP)') else '   aes_key_exp.hex: NOT FOUND - run make vectors')"
 
-clean-sim:
-	@echo "Cleaning simulation artifacts..."
-	@$(PYTHON) -c "import shutil; shutil.rmtree('$(LOG_DIR)', ignore_errors=True)"
-	@$(PYTHON) -c "import shutil; shutil.rmtree('$(PROJECT_ROOT)/xsim.dir', ignore_errors=True)"
-	@$(PYTHON) -c "import glob, os; [os.remove(f) for f in glob.glob('$(PROJECT_ROOT)/*.pb') + glob.glob('$(PROJECT_ROOT)/*.wdb')]"
-	@echo "   Done."
+check-sim:
+	@echo "Checking simulation prerequisites..."
+	@echo "   xvlog: $(XVLOG)"
+	@$(XVLOG) --version
+	@echo "   Python: $(PYTHON)"
+	@$(PYTHON) --version
+	@echo "   SRC dir:"
+	@$(PYTHON) -c "import os; print('   $(SRC_DIR): EXISTS' if os.path.isdir('$(SRC_DIR)') else '   $(SRC_DIR): NOT FOUND')"
+	@echo "   Vectors:"
+	@$(PYTHON) -c "import os; print('   sbox_golden.hex: EXISTS' if os.path.exists('$(GOLDEN_SBOX)') else '   sbox_golden.hex: NOT FOUND - run make vectors')"
+	@$(PYTHON) -c "import os; print('   aes_kat.hex:     EXISTS' if os.path.exists('$(GOLDEN_KAT)') else '   aes_kat.hex:     NOT FOUND - run make vectors')"
 
 sim-help:
 	@echo ""
