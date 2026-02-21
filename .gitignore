@@ -33,3 +33,10 @@ Thumbs.db
 
 # Keep project file
 !*.xpr*.bin
+
+# Simulation artifacts (generated at runtime)
+vectors/
+logs/
+xsim.dir/
+*.wdb
+*.pb
