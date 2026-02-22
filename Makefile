@@ -42,8 +42,10 @@ else
 	@echo "  make ping      - Check board connectivity"
 	@echo "  make ssh       - SSH to board"
 	@echo "  make upload    - Upload C++ drivers to board"
-	@echo "  make test      - Compile + run test_hsm"
+	@echo "  make test      - Compile + run test_hsm (TRNG)"
 	@echo "  make test-trng - Compile + run test_trng"
+	@echo "  make test-aes  - Compile + run test_aes (AES-256 KAT)"
+	@echo "  make test-all  - Run TRNG + AES tests (full HW regression)"
 	@echo "  make clean     - Remove deploy/"
 endif
 
@@ -82,7 +84,7 @@ ETH_IFACE := $(shell ifconfig | \
 SSH_CMD		:= ssh -o BindAddress=$(BIND_IP) -o ConnectTimeout=5
 SCP_CMD		:= scp -o BindAddress=$(BIND_IP) -o ConnectTimeout=5
 
-.PHONY: setup-network ping ssh upload test test-trng
+.PHONY: setup-network ping ssh upload test test-trng test-aes test-all
 
 setup-network:
 	@if [ -z "$(ETH_IFACE)" ]; then \
@@ -111,6 +113,18 @@ test: upload
 
 test-trng: upload
 	$(SSH_CMD) -t $(BOARD_USER)@$(BOARD_IP) 'g++ -o test_trng test_trng.cpp && sudo ./test_trng'
+
+test-aes: upload
+	$(SSH_CMD) -t $(BOARD_USER)@$(BOARD_IP) 'g++ -o test_aes test_aes.cpp && sudo ./test_aes'
+
+test-all: upload
+	@echo "================================================"
+	@echo "  Full HW Regression: TRNG + AES-256"
+	@echo "================================================"
+	$(SSH_CMD) -t $(BOARD_USER)@$(BOARD_IP) \
+		'g++ -o test_trng test_trng.cpp && sudo ./test_trng && \
+		 echo "" && \
+		 g++ -o test_aes test_aes.cpp && sudo ./test_aes'
 
 capture: upload
 	@echo "Capturing 1MB RNG data..."
