@@ -2305,6 +2305,17 @@
                 "value_src": "constant"
               }
             }
+          },
+          "trng_data": {
+            "direction": "O",
+            "left": "31",
+            "right": "0"
+          },
+          "trng_data_valid": {
+            "direction": "O"
+          },
+          "trng_hw_req": {
+            "direction": "I"
           }
         }
       },
@@ -2574,6 +2585,17 @@
                 "value_src": "constant"
               }
             }
+          },
+          "trng_data": {
+            "direction": "I",
+            "left": "31",
+            "right": "0"
+          },
+          "trng_data_valid": {
+            "direction": "I"
+          },
+          "trng_req": {
+            "direction": "O"
           }
         }
       }
@@ -2617,8 +2639,8 @@
           "processing_system7_0/M_AXI_GP0_ACLK",
           "axi_smc/aclk",
           "rst_ps7_0_100M/slowest_sync_clk",
-          "my_hsm/S_AXI_ACLK",
-          "aes_bridge_0/S_AXI_ACLK"
+          "aes_bridge_0/S_AXI_ACLK",
+          "my_hsm/S_AXI_ACLK"
         ]
       },
       "processing_system7_0_FCLK_RESET0_N": {
@@ -2631,8 +2653,8 @@
         "ports": [
           "rst_ps7_0_100M/peripheral_aresetn",
           "axi_smc/aresetn",
-          "my_hsm/S_AXI_ARESETN",
-          "aes_bridge_0/S_AXI_ARESETN"
+          "aes_bridge_0/S_AXI_ARESETN",
+          "my_hsm/S_AXI_ARESETN"
         ]
       }
     },

@@ -185,7 +185,7 @@ module aes_axi_wrapper #(
                 KINJ_IDLE: begin
                     if (key_inject_strobe) begin
                         kinj_count   <=  0;
-                        king_key_reg <= '0;
+                        kinj_key_reg <= '0;
                         kinj_state   <= KINJ_REQ;
                     end
                     // SW key_load clears HW key flag
@@ -330,14 +330,14 @@ module aes_axi_wrapper #(
                 case (S_AXI_ARADDR[6:2])
                     ADDR_CTRL:     axi_rdata <= slv_ctrl;
                     ADDR_STATUS:   axi_rdata <= slv_status;
-                    ADDR_KEY_W0:   axi_rdata <= slv_key[0];
-                    ADDR_KEY_W1:   axi_rdata <= slv_key[1];
-                    ADDR_KEY_W2:   axi_rdata <= slv_key[2];
-                    ADDR_KEY_W3:   axi_rdata <= slv_key[3];
-                    ADDR_KEY_W4:   axi_rdata <= slv_key[4];
-                    ADDR_KEY_W5:   axi_rdata <= slv_key[5];
-                    ADDR_KEY_W6:   axi_rdata <= slv_key[6];
-                    ADDR_KEY_W7:   axi_rdata <= slv_key[7];
+                    ADDR_KEY_W0:   axi_rdata <= key_from_hw ? 32'h0 : slv_key[0];
+                    ADDR_KEY_W1:   axi_rdata <= key_from_hw ? 32'h0 : slv_key[1];
+                    ADDR_KEY_W2:   axi_rdata <= key_from_hw ? 32'h0 : slv_key[2];
+                    ADDR_KEY_W3:   axi_rdata <= key_from_hw ? 32'h0 : slv_key[3];
+                    ADDR_KEY_W4:   axi_rdata <= key_from_hw ? 32'h0 : slv_key[4];
+                    ADDR_KEY_W5:   axi_rdata <= key_from_hw ? 32'h0 : slv_key[5];
+                    ADDR_KEY_W6:   axi_rdata <= key_from_hw ? 32'h0 : slv_key[6];
+                    ADDR_KEY_W7:   axi_rdata <= key_from_hw ? 32'h0 : slv_key[7];
                     ADDR_PTEXT_W0: axi_rdata <= slv_ptext[0];
                     ADDR_PTEXT_W1: axi_rdata <= slv_ptext[1];
                     ADDR_PTEXT_W2: axi_rdata <= slv_ptext[2];

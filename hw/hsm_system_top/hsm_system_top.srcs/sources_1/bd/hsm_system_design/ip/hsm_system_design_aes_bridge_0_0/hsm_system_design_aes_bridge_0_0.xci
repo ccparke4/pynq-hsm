@@ -56,7 +56,10 @@
         "S_AXI_RDATA": [ { "direction": "out", "size_left": "31", "size_right": "0" } ],
         "S_AXI_RRESP": [ { "direction": "out", "size_left": "1", "size_right": "0" } ],
         "S_AXI_RVALID": [ { "direction": "out" } ],
-        "S_AXI_RREADY": [ { "direction": "in", "driver_value": "0" } ]
+        "S_AXI_RREADY": [ { "direction": "in", "driver_value": "0" } ],
+        "trng_data": [ { "direction": "in", "size_left": "31", "size_right": "0" } ],
+        "trng_data_valid": [ { "direction": "in" } ],
+        "trng_req": [ { "direction": "out" } ]
       },
       "interfaces": {
         "S_AXI": {
@@ -165,5 +168,5 @@
       }
     }
   },
-  "checksum": "2c7d50c6"
+  "checksum": "a49f5972"
 }
