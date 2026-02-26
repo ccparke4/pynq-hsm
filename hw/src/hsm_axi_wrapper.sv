@@ -36,7 +36,13 @@ module hsm_axi_wrapper #
     output wire [C_S_AXI_DATA_WIDTH-1 : 0]  S_AXI_RDATA,            // data
     output wire [1 : 0]                     S_AXI_RRESP,            // status
     output wire                             S_AXI_RVALID,           // slave "data valid"
-    input  wire                             S_AXI_RREADY             // master "i'm ready"
+    input  wire                             S_AXI_RREADY,             // master "i'm ready"
+
+    // TRNG HW interface 
+    output wire [31:0] trng_data,           // output random data (to AES)
+    output wire        trng_data_valid,     // pulse when rand data ready
+    input  wire        trng_hw_req          // AES side, requests sample
+    
 );
 
     // ==== Register Addresses ===
@@ -75,13 +81,14 @@ module hsm_axi_wrapper #
     wire ctrl_sample    = slv_reg_ctrl[1];
     wire ctrl_clear     = slv_reg_ctrl[2];
 
-    // === TRNG inst. ===
+    // TRNG Inst ======================================
     trng_sampler trng_inst (
         .clk                (S_AXI_ACLK),
         .rst_n              (S_AXI_ARESETN),
         .enable             (ctrl_enable),
         .sample_trig        (ctrl_sample),
         .clear              (ctrl_clear),
+        .hw_req             (trng_hw_req),
         .raw_osc            (trng_raw_osc),
         .random_out         (trng_random),
         .sample_count       (trng_sample_count),
@@ -90,6 +97,7 @@ module hsm_axi_wrapper #
         .health_valid_strobe(trng_health_valid_strobe)
     );
 
+    
     // === Health Monitor inst. ===
     trng_health health_inst (
         .clk            (S_AXI_ACLK),
@@ -102,23 +110,37 @@ module hsm_axi_wrapper #
         .health_fail    (trng_health_fail)
     );
 
-    // === Free running counter for debug ===
+    // TRNG data valid detection
+    // pulse when sample_count inc = new rand ready
+    reg [31:0] sample_count_d;
     always_ff @(posedge S_AXI_ACLK or negedge S_AXI_ARESETN) begin
-        if (!S_AXI_ARESETN)
-            slv_reg_counter <= 32'h0;
-        else    
-            slv_reg_counter <= slv_reg_counter + 1;
+        if (!S_AXI_ARESETN) begin
+            sample_count_d <= 0;
+        end else begin
+            sample_count_d <= trng_sample_count; // delay by 1 cycle
+        end
     end
 
-    // === Status register ===
+    assign trng_data = trng_random;
+    assign trng_data_valid = (trng_sample_count != sample_count_d); // new sample when count changes
+
+    // Free running counter for debug ===
+    always_ff @(posedge S_AXI_ACLK or negedge S_AXI_ARESETN) begin
+        if (!S_AXI_ARESETN) begin
+            slv_reg_counter <= 0;
+        end else begin
+            slv_reg_counter <= slv_reg_counter + 1;
+        end
+    end
+
+    // === Status Register ===
     always_comb begin
         slv_reg_status = 32'h0;
         slv_reg_status[0] = trng_osc_running;
         slv_reg_status[7:4] = trng_raw_osc;
-        // health monitor flags are ~sticky~
-        slv_reg_status[8] = trng_health_fail;       // overall health fail (APT or RCT)
-        slv_reg_status[9] = trng_health_rct_fail;   // repetition count test fail
-        slv_reg_status[10] = trng_health_apt_fail;  // adaptive proportion test fail
+        slv_reg_status[8] = trng_health_fail;
+        slv_reg_status[9] = trng_health_rct_fail;
+        slv_reg_status[10] = trng_health_apt_fail;
     end
 
     // === Core AXI Logic ===

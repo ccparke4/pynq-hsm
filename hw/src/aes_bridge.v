@@ -27,7 +27,12 @@ module aes_bridge (
     output wire [31:0]  S_AXI_RDATA,
     output wire [1:0]   S_AXI_RRESP,
     output wire         S_AXI_RVALID,
-    input  wire         S_AXI_RREADY
+    input  wire         S_AXI_RREADY,
+
+    // trng hw interface, PL internal, wired to hsm_bridge
+    input  wire [31:0]  trng_data,           // from TRNG, to AES
+    input  wire         trng_data_valid,     // from TRNG, to AES
+    output wire         trng_req             // from AES, to TRNG, pulse to request new random data sample
 );
     aes_axi_wrapper #(
         .C_S_AXI_DATA_WIDTH(32),
@@ -53,6 +58,10 @@ module aes_bridge (
         .S_AXI_RDATA    (S_AXI_RDATA),
         .S_AXI_RRESP    (S_AXI_RRESP),
         .S_AXI_RVALID   (S_AXI_RVALID),
-        .S_AXI_RREADY   (S_AXI_RREADY)
+        .S_AXI_RREADY   (S_AXI_RREADY),
+        // TRNG HW interface
+        .trng_data      (trng_data),
+        .trng_data_valid(trng_data_valid),
+        .trng_req       (trng_req)
     );
 endmodule

@@ -9,6 +9,7 @@ module trng_sampler(
     input   wire        enable,         // enable oscillators
     input   wire        sample_trig,    // trigger single sample
     input   wire        clear,          // clear accumulated data
+    input   wire        hw_req,         // AES side, requests sample for rand word
 
     // outputs
     output  wire [3:0]  raw_osc,        // raw oscillator outputs dbg
@@ -130,7 +131,22 @@ module trng_sampler(
     // detect rising edge of sample_trig
     reg trig_d;
     always_ff @(posedge clk) trig_d <= sample_trig;
-    wire start_collection = (sample_trig && !trig_d); // pulse on rising edge
+    wire sw_start = (sample_trig && !trig_d); // pulse on rising edge
+
+    // detect rising edge of hw_req (HW key inject path)
+    reg hw_req_d;
+    always_ff @(posedge clk or negedge rst_n) begin
+        if (!rst_n) begin
+            hw_req_d <= 0;
+        end else begin
+            hw_req_d <= hw_req;
+        end
+    end
+
+    wire hw_start = (hw_req && !hw_req_d); // pulse on rising edge
+
+    // either path triggers collction
+    wire start_collection = sw_start || hw_start;
 
     always_ff @(posedge clk or negedge rst_n) begin
         if (!rst_n || clear) begin

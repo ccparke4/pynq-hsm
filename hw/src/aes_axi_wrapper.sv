@@ -69,29 +69,34 @@ module aes_axi_wrapper #(
     output wire [C_S_AXI_DATA_WIDTH-1 : 0]  S_AXI_RDATA,            // data
     output wire [1 : 0]                     S_AXI_RRESP,            // status
     output wire                             S_AXI_RVALID,           // slave "data valid"
-    input  wire                             S_AXI_RREADY             // master "i'm ready"
+    input  wire                             S_AXI_RREADY,           // master "i'm ready"
+
+    // Trng interface (to AES core)
+    input  wire [31:0]      trng_data,                  // output random data (to AES)
+    input  wire             trng_data_valid,            // pulse when rand data ready
+    output reg              trng_req                    // AES side, requests sample
 );
 
     // Register addresses ==============================
     localparam ADDR_CTRL     = 5'h00; // 0x00
-        localparam ADDR_STATUS   = 5'h01; // 0x04
-        // 0x08, 0x0C reserved
-        localparam ADDR_KEY_W0   = 5'h04; // 0x10
-        localparam ADDR_KEY_W1   = 5'h05; // 0x14
-        localparam ADDR_KEY_W2   = 5'h06; // 0x18
-        localparam ADDR_KEY_W3   = 5'h07; // 0x1C
-        localparam ADDR_KEY_W4   = 5'h08; // 0x20
-        localparam ADDR_KEY_W5   = 5'h09; // 0x24
-        localparam ADDR_KEY_W6   = 5'h0A; // 0x28
-        localparam ADDR_KEY_W7   = 5'h0B; // 0x2C
-        localparam ADDR_PTEXT_W0 = 5'h0C; // 0x30
-        localparam ADDR_PTEXT_W1 = 5'h0D; // 0x34
-        localparam ADDR_PTEXT_W2 = 5'h0E; // 0x38
-        localparam ADDR_PTEXT_W3 = 5'h0F; // 0x3C
-        localparam ADDR_CTEXT_W0 = 5'h10; // 0x40
-        localparam ADDR_CTEXT_W1 = 5'h11; // 0x44
-        localparam ADDR_CTEXT_W2 = 5'h12; // 0x48
-        localparam ADDR_CTEXT_W3 = 5'h13; // 0x4C
+    localparam ADDR_STATUS   = 5'h01; // 0x04
+    // 0x08, 0x0C reserved
+    localparam ADDR_KEY_W0   = 5'h04; // 0x10
+    localparam ADDR_KEY_W1   = 5'h05; // 0x14
+    localparam ADDR_KEY_W2   = 5'h06; // 0x18
+    localparam ADDR_KEY_W3   = 5'h07; // 0x1C
+    localparam ADDR_KEY_W4   = 5'h08; // 0x20
+    localparam ADDR_KEY_W5   = 5'h09; // 0x24
+    localparam ADDR_KEY_W6   = 5'h0A; // 0x28
+    localparam ADDR_KEY_W7   = 5'h0B; // 0x2C
+    localparam ADDR_PTEXT_W0 = 5'h0C; // 0x30
+    localparam ADDR_PTEXT_W1 = 5'h0D; // 0x34
+    localparam ADDR_PTEXT_W2 = 5'h0E; // 0x38
+    localparam ADDR_PTEXT_W3 = 5'h0F; // 0x3C
+    localparam ADDR_CTEXT_W0 = 5'h10; // 0x40
+    localparam ADDR_CTEXT_W1 = 5'h11; // 0x44
+    localparam ADDR_CTEXT_W2 = 5'h12; // 0x48
+    localparam ADDR_CTEXT_W3 = 5'h13; // 0x4C
 
     // SW writeable registers ================================
     logic [31:0] slv_ctrl;
@@ -99,28 +104,32 @@ module aes_axi_wrapper #(
     logic [31:0] slv_ptext [0:3];
 
     // Control bit extraction ================================
-    wire ctrl_key_load = slv_ctrl[0];
-    wire ctrl_encrypt  = slv_ctrl[1];
-    wire ctrl_clear    = slv_ctrl[2];
+    wire ctrl_key_load   = slv_ctrl[0];
+    wire ctrl_encrypt    = slv_ctrl[1];
+    wire ctrl_clear      = slv_ctrl[2];
+    wire ctrl_key_inject = slv_ctrl[3];     // trigger hw key injection
 
     // =======================================================
     // edge detection for one-cycle strobes to aes_core
     // same as TRNG start logic
     // =======================================================
-    reg ctrl_key_load_d, ctrl_encrypt_d;
+    reg ctrl_key_load_d, ctrl_encrypt_d, ctrl_key_inject_d;
 
     always_ff @(posedge S_AXI_ACLK or negedge S_AXI_ARESETN) begin
         if (!S_AXI_ARESETN) begin
             ctrl_key_load_d <= 0;
             ctrl_encrypt_d  <= 0;
+            ctrl_key_inject_d <= 0;
         end else begin
             ctrl_key_load_d <= ctrl_key_load;
             ctrl_encrypt_d  <= ctrl_encrypt;
+            ctrl_key_inject_d <= ctrl_key_inject;
         end
     end
 
     wire key_valid_strobe = (ctrl_key_load && !ctrl_key_load_d); // pulse when key_load goes high
     wire encrypt_start_strobe = (ctrl_encrypt && !ctrl_encrypt_d);   // pulse when encrypt goes high
+    wire key_inject_strobe = (ctrl_key_inject && !ctrl_key_inject_d); // pulse when key_inject goes high
 
     // ============== AES Core Signals ==============
     wire            aes_ready;
@@ -145,23 +154,100 @@ module aes_axi_wrapper #(
         end
     end
 
+    // Key Injection FSM (KINJ)
+    // requests 8 TRNG samples, assembles key, loads into aes_core, key never touches axi bus.
+    localparam [2:0] 
+        KINJ_IDLE    = 3'b000, 
+        KINJ_REQ     = 3'b001, 
+        KINJ_WAIT    = 3'b010, 
+        KINJ_CAPTURE = 3'b011,
+        KINJ_LOAD    = 3'b100;
+
+    reg [2:0]   kinj_state;
+    reg [2:0]   kinj_count;
+    reg [255:0] kinj_key_reg;
+    reg         kinj_key_valid;
+    reg         key_from_hw;
+
+    always_ff @(posedge S_AXI_ACLK or negedge S_AXI_ARESETN) begin
+        if (!S_AXI_ARESETN) begin
+            kinj_state <= KINJ_IDLE;
+            kinj_count <= 0;
+            kinj_key_reg <= 0;
+            kinj_key_valid <= 0;
+            trng_req <= 0;
+            key_from_hw <= 0;
+        end else begin
+            // defaults
+            kinj_key_valid <= 0;
+            trng_req       <= 0;
+            case (kinj_state)
+                KINJ_IDLE: begin
+                    if (key_inject_strobe) begin
+                        kinj_count   <=  0;
+                        king_key_reg <= '0;
+                        kinj_state   <= KINJ_REQ;
+                    end
+                    // SW key_load clears HW key flag
+                    if (key_valid_strobe)
+                        key_from_hw <= 0;
+                end
+                KINJ_REQ: begin
+                    trng_req <= 1;           // request sample from TRNG
+                    kinj_state <= KINJ_WAIT;
+                end
+                KINJ_WAIT: begin
+                    // wait for trng to prod. new random word
+                    if (trng_data_valid) 
+                        kinj_state <= KINJ_CAPTURE;
+                end
+                KINJ_CAPTURE: begin
+                    kinj_key_reg <= {kinj_key_reg[223:0], trng_data}; // shift in new sample
+                    kinj_count <= kinj_count + 1;
+
+                    if (kinj_count == 7) // after 8 samples, we have a full key
+                        kinj_state <= KINJ_LOAD;
+                    else
+                        kinj_state <= KINJ_REQ; // request next sample
+                end
+                KINJ_LOAD: begin
+                    kinj_key_valid <= 1; // pulse to load key into aes_core
+                    key_from_hw <= 1;    // indicate key came from hw (for status reg)
+                    kinj_state <= KINJ_IDLE;
+                end
+
+                default: kinj_state <= KINJ_IDLE;
+            endcase
+        end
+    end
+
+    wire kinj_busy = (kinj_state != KINJ_IDLE);
+
+    // KEY Source Mux ===================================
+    wire [255:0] key_sw = {slv_key[0], slv_key[1], slv_key[2], slv_key[3], slv_key[4], slv_key[5], slv_key[6], slv_key[7]};
+    wire [255:0] key_to_core = key_from_hw ? kinj_key_reg : key_sw;
+
+    // key valid either from sw strobe or hw injection strob
+    wire key_valid_to_core = key_valid_strobe || kinj_key_valid;
+
     // ============= AES Core Instantiation ==============
+    
     aes_core aes_inst (
-            .clk           (S_AXI_ACLK),
-            .rst_n         (S_AXI_ARESETN),
-            .key           ({slv_key[0], slv_key[1], slv_key[2], slv_key[3], slv_key[4], slv_key[5], slv_key[6], slv_key[7]}),
-            .key_valid     (key_valid_strobe),
-            .plaintext     ({slv_ptext[0], slv_ptext[1], slv_ptext[2], slv_ptext[3]}),
-            .encrypt_start (encrypt_start_strobe),
-            .clear         (ctrl_clear),
-            .ready         (aes_ready),
-            .busy          (aes_busy),
-            .done          (aes_done),
-            .ciphertext    (aes_ciphertext)
+            .clk(S_AXI_ACLK),
+            .rst_n(S_AXI_ARESETN),
+            .key(key_to_core),
+            .key_valid(key_valid_to_core),
+            .plaintext({slv_ptext[0], slv_ptext[1], slv_ptext[2], slv_ptext[3]}),
+            .encrypt_start(encrypt_start_strobe),
+            .clear(ctrl_clear),
+            .ready(aes_ready),
+            .busy(aes_busy),
+            .done(aes_done),
+            .ciphertext(aes_ciphertext)
     );
 
     // ============= Status Register =============
-    wire [31:0] slv_status = {29'b0, done_latched, aes_busy, aes_ready};
+    wire [31:0] slv_status = {27'b0, kinj_busy, key_from_hw, done_latched, aes_busy, aes_ready};
 
     // ============= AXI Lite Interface =============
     logic axi_awready, axi_wready, axi_bvalid;

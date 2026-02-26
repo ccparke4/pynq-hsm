@@ -28,7 +28,12 @@ module hsm_bridge(
     output wire [31:0]  S_AXI_RDATA,
     output wire [1:0]   S_AXI_RRESP,
     output wire         S_AXI_RVALID,
-    input  wire         S_AXI_RREADY
+    input  wire         S_AXI_RREADY,
+
+    // trng hw interface, PL internal, wired to aes_bridge
+    output wire [31:0]  trng_data,           // output random data (to AES)
+    output wire         trng_data_valid,     // pulse when rand data ready
+    input  wire         trng_hw_req          // AES side, requests sample
 );
 
     // instatiate the systemverilog module
@@ -56,7 +61,11 @@ module hsm_bridge(
         .S_AXI_RDATA    (S_AXI_RDATA),
         .S_AXI_RRESP    (S_AXI_RRESP),
         .S_AXI_RVALID   (S_AXI_RVALID),
-        .S_AXI_RREADY   (S_AXI_RREADY)
+        .S_AXI_RREADY   (S_AXI_RREADY),
+        // TRNG HW interface
+        .trng_data      (trng_data),
+        .trng_data_valid(trng_data_valid),
+        .trng_hw_req    (trng_hw_req)
     );
 
 
